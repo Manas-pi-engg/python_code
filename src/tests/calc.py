@@ -10,4 +10,4 @@ def mul(x,y):
 
 
 res1 = add(3, 5)
-res2 = sub(3, 5)
+res2 = sub(4, 5)

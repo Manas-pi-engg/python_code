@@ -1,0 +1,122 @@
+
+clone:
+  git:
+    image: plugins/git
+    commands:
+      - git init
+      - git remote add origin ${DRONE_REMOTE_URL}
+      - git fetch origin
+      - git checkout ${DRONE_COMMIT_SHA}
+
+pipeline:
+  download:
+    image: docker
+    commands:
+      - docker pull 612427630422.dkr.ecr.us-east-1.amazonaws.com/sre/moe-trufflehog
+      - docker pull 612427630422.dkr.ecr.us-east-1.amazonaws.com/platform/python3-package-builder
+      - docker pull 612427630422.dkr.ecr.us-east-1.amazonaws.com/sre/py3-venv-builder
+      - docker pull 612427630422.dkr.ecr.us-east-1.amazonaws.com/sre/python-cd-deployer
+      - docker pull 612427630422.dkr.ecr.us-east-1.amazonaws.com/sre/alarm-iac
+      - docker pull 612427630422.dkr.ecr.us-east-1.amazonaws.com/platform/cookiecutter-generator
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/ec2-user/.docker:/root/.docker
+
+  setup-venv-py3:
+    image: 612427630422.dkr.ecr.us-east-1.amazonaws.com/platform/python3-package-builder
+    group: venv
+    environment:
+      - MULTIMODULE=true
+      - PY_VER=3
+    commands:
+      - /executor --setup
+    when:
+      event: [tag, pull_request]
+
+  lint-py3:
+    image: 612427630422.dkr.ecr.us-east-1.amazonaws.com/platform/python3-package-builder
+    group: lint
+    environment:
+      - MULTIMODULE=true
+      - PY_VER=3
+    commands:
+      - /executor --lint
+    when:
+      event: [tag, pull_request]
+
+  test-py3:
+    image: 612427630422.dkr.ecr.us-east-1.amazonaws.com/platform/python3-package-builder
+    group: test
+    environment:
+      - MULTIMODULE=true
+      - PY_VER=3
+    commands:
+      - /executor --test
+    when:
+      event: [tag, pull_request]
+
+  merge-report:
+    image: 612427630422.dkr.ecr.us-east-1.amazonaws.com/platform/python3-package-builder
+    environment:
+      - MULTIMODULE=true
+    commands:
+      - /executor --merge-report
+    when:
+      event: pull_request
+
+  coverage-report-github-comment:
+    image: jmccann/drone-github-comment:1
+    message_file: coverage.html
+    update: true
+    when:
+      event: pull_request
+
+  package-builder:
+    image: 612427630422.dkr.ecr.us-east-1.amazonaws.com/platform/python3-package-builder
+    commands:
+      - /executor --build
+    when:
+      event: tag
+
+  package-build-slack-notification:
+    image: themaz/drone-slack
+    when:
+      status: [ success, failure ]
+      event: tag
+    webhook: https://hooks.slack.com/services/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 #Ignore TruffleHog
+    template: >
+      {{#success build.status}}✔{{ else }}✘{{/success}}    *Package: moe-{{build.tag}}*    *Repo: {{repo.name}}*
+  
+  py3-venv-builder:
+    image: 612427630422.dkr.ecr.us-east-1.amazonaws.com/sre/py3-venv-builder
+    environment:
+      - MULTIMODULE=true
+    when:
+      event: tag
+    commands:
+      - python3 /py-venv-builder
+
+  py3-cd-deployer:
+    image: 612427630422.dkr.ecr.us-east-1.amazonaws.com/sre/python-cd-deployer
+    environment:
+      - MULTIMODULE=true
+    when:
+      event: push
+    commands:
+      - python3 /start_deployment
+
+
+  alarm-iac-plan:
+    image: 612427630422.dkr.ecr.us-east-1.amazonaws.com/sre/alarm-iac:latest
+    when:
+      event: pull_request
+    commands:
+      - /src/main.py --action plan
+
+  alarm-iac-apply:
+    image: 612427630422.dkr.ecr.us-east-1.amazonaws.com/sre/alarm-iac:latest
+    when:
+      event: push
+      branch: master
+    commands:
+      - /src/main.py --action apply

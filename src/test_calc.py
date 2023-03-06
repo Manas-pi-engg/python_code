@@ -13,6 +13,9 @@ class test_calc(unittest.TestCase):
     def test_sub1(self):
         self.assertEqual(calc.mul(2, 3), 6)
 
+
+    def test_add14(self):
+            self.assertEqual(cal.add2(2 , 7), 9)
     def test_add1(self):
             self.assertEqual(cal.add(2 , 3,4), 9)
     def test_add2(self):

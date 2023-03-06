@@ -10,3 +10,5 @@ def mul(x,y,z):
 
 def add2(x,y):
   return x+y
+
+a=5

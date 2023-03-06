@@ -1,2 +1,1 @@
-# python_code
-1
+# python_c
